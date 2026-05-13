@@ -79,22 +79,42 @@ jobs:
           Write-Host "Collecting from $binDir"
           Copy-Item -Path "$binDir\*" -Destination $stage -Recurse -Force
 
-          # Vulkan runtime loader (so user machines without SDK can still run)
+          # Vulkan runtime loader
           $vkLoader = "$env:VULKAN_SDK\Bin\vulkan-1.dll"
           if (Test-Path $vkLoader) { Copy-Item $vkLoader -Destination $stage -Force }
 
-          @"
-          source repo : am17an/llama.cpp
-          source ref  : ${{ github.event.inputs.ref || 'mtp-clean' }}
-          source sha  : $env:SOURCE_SHA
-          backend     : Vulkan $env:VULKAN_VERSION
-          runner      : windows-2025
-          built at    : $(Get-Date -Format o)
-          cmake flags : -DGGML_VULKAN=ON -DGGML_NATIVE=OFF -DGGML_CPU_ALL_VARIANTS=ON -DGGML_BACKEND_DL=ON -DGGML_RPC=ON -DBUILD_SHARED_LIBS=ON -DLLAMA_CURL=OFF
-          "@ | Out-File -FilePath "$stage\BUILD_INFO.txt" -Encoding utf8
-
-          Write-Host "=== Staged files ==="
-          Get-ChildItem $stage | Format-Table Name,Length
+          # Bundle OpenSSL DLLs so users don't need to install it separately
+          $sslSearchPaths = @(
+            "C:\Program Files\OpenSSL\bin",
+            "C:\Program Files\OpenSSL-Win64\bin",
+            "C:\OpenSSL-Win64\bin",
+            "$env:ProgramFiles\Common Files\SSL\bin"
+          )
+          $sslDlls = @("libcrypto-3-x64.dll", "libssl-3-x64.dll")
+          foreach ($searchPath in $sslSearchPaths) {
+            if (Test-Path $searchPath) {
+              foreach ($dll in $sslDlls) {
+                $src = Join-Path $searchPath $dll
+                if (Test-Path $src) {
+                  Write-Host "Found $dll at $src"
+                  Copy-Item $src -Destination $stage -Force
+                }
+              }
+              break
+            }
+          }
+          # Fallback: search runner system for the DLLs
+          foreach ($dll in $sslDlls) {
+            if (-not (Test-Path (Join-Path $stage $dll))) {
+              $found = Get-ChildItem -Path C:\ -Filter $dll -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+              if ($found) {
+                Write-Host "Found $dll via search at $($found.FullName)"
+                Copy-Item $found.FullName -Destination $stage -Force
+              } else {
+                Write-Host "WARNING: $dll not found on runner"
+              }
+            }
+          }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v5
