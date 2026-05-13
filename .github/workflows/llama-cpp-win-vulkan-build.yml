@@ -142,7 +142,7 @@ jobs:
           Get-ChildItem $stage | Format-Table Name,Length
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: llama-cpp-${{ github.event.inputs.ref || 'mtp-clean' }}-${{ env.SOURCE_SHORT }}-win-vulkan-x64
           path: stage/
