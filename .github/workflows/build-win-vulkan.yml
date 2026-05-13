@@ -16,7 +16,7 @@ jobs:
     runs-on: windows-2025
     steps:
       - name: Checkout am17an/llama.cpp
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: am17an/llama.cpp
           ref: ${{ github.event.inputs.ref || 'mtp-clean' }}
@@ -97,7 +97,7 @@ jobs:
           Get-ChildItem $stage | Format-Table Name,Length
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: llama-cpp-${{ github.event.inputs.ref || 'mtp-clean' }}-${{ env.SOURCE_SHORT }}-win-vulkan-x64
           path: stage/
