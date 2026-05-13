@@ -1,0 +1,104 @@
+name: Build llama.cpp Windows Vulkan (am17an/mtp-clean)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch/tag/commit of am17an/llama.cpp to build"
+        required: true
+        default: "mtp-clean"
+
+env:
+  VULKAN_VERSION: 1.4.313.2
+
+jobs:
+  windows-vulkan:
+    runs-on: windows-2025
+    steps:
+      - name: Checkout am17an/llama.cpp
+        uses: actions/checkout@v4
+        with:
+          repository: am17an/llama.cpp
+          ref: ${{ github.event.inputs.ref || 'mtp-clean' }}
+          path: llama.cpp
+          fetch-depth: 1
+
+      - name: Record source commit
+        shell: pwsh
+        working-directory: llama.cpp
+        run: |
+          $sha = git rev-parse HEAD
+          $short = git rev-parse --short HEAD
+          "SOURCE_SHA=$sha"     | Out-File -FilePath $env:GITHUB_ENV -Append
+          "SOURCE_SHORT=$short" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "Building from commit $sha"
+
+      - name: Install Vulkan SDK
+        shell: pwsh
+        run: |
+          $installerUrl = "https://sdk.lunarg.com/sdk/download/$env:VULKAN_VERSION/windows/vulkansdk-windows-X64-$env:VULKAN_VERSION.exe"
+          $installerPath = "$env:RUNNER_TEMP\VulkanSDK-Installer.exe"
+          Write-Host "Downloading Vulkan SDK $env:VULKAN_VERSION"
+          curl.exe -L -o "$installerPath" "$installerUrl"
+          Write-Host "Installing Vulkan SDK"
+          Start-Process -FilePath "$installerPath" -ArgumentList "--accept-licenses","--default-answer","--confirm-command","install" -Wait
+          $vulkanPath = "C:\VulkanSDK\$env:VULKAN_VERSION"
+          if (-not (Test-Path $vulkanPath)) { throw "Vulkan SDK not found at $vulkanPath" }
+          "VULKAN_SDK=$vulkanPath" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "$vulkanPath\Bin"        | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Configure with CMake
+        shell: cmd
+        working-directory: llama.cpp
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DGGML_VULKAN=ON
+          -DGGML_NATIVE=OFF
+          -DGGML_CPU_ALL_VARIANTS=ON
+          -DGGML_BACKEND_DL=ON
+          -DGGML_RPC=ON
+          -DBUILD_SHARED_LIBS=ON
+          -DLLAMA_CURL=OFF
+          -DCMAKE_CXX_FLAGS=/utf-8
+
+      - name: Build
+        shell: cmd
+        working-directory: llama.cpp
+        run: cmake --build build --config Release -j --parallel
+
+      - name: Stage binaries
+        shell: pwsh
+        working-directory: llama.cpp
+        run: |
+          $stage = "$env:GITHUB_WORKSPACE\stage"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+
+          $binDir = "build\bin\Release"
+          if (-not (Test-Path $binDir)) { $binDir = "build\bin" }
+          Write-Host "Collecting from $binDir"
+          Copy-Item -Path "$binDir\*" -Destination $stage -Recurse -Force
+
+          # Vulkan runtime loader (so user machines without SDK can still run)
+          $vkLoader = "$env:VULKAN_SDK\Bin\vulkan-1.dll"
+          if (Test-Path $vkLoader) { Copy-Item $vkLoader -Destination $stage -Force }
+
+          @"
+          source repo : am17an/llama.cpp
+          source ref  : ${{ github.event.inputs.ref || 'mtp-clean' }}
+          source sha  : $env:SOURCE_SHA
+          backend     : Vulkan $env:VULKAN_VERSION
+          runner      : windows-2025
+          built at    : $(Get-Date -Format o)
+          cmake flags : -DGGML_VULKAN=ON -DGGML_NATIVE=OFF -DGGML_CPU_ALL_VARIANTS=ON -DGGML_BACKEND_DL=ON -DGGML_RPC=ON -DBUILD_SHARED_LIBS=ON -DLLAMA_CURL=OFF
+          "@ | Out-File -FilePath "$stage\BUILD_INFO.txt" -Encoding utf8
+
+          Write-Host "=== Staged files ==="
+          Get-ChildItem $stage | Format-Table Name,Length
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: llama-cpp-${{ github.event.inputs.ref || 'mtp-clean' }}-${{ env.SOURCE_SHORT }}-win-vulkan-x64
+          path: stage/
+          retention-days: 30
