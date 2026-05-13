@@ -13,7 +13,7 @@ env:
 
 jobs:
   windows-vulkan:
-    runs-on: windows-2025
+    runs-on: windows-2025-vs2026
     steps:
       - name: Checkout am17an/llama.cpp
         uses: actions/checkout@v5
@@ -133,7 +133,7 @@ jobs:
           source ref  : ${{ github.event.inputs.ref || 'mtp-clean' }}
           source sha  : $env:SOURCE_SHA
           backend     : Vulkan $env:VULKAN_VERSION
-          runner      : windows-2025
+          runner      : windows-2025-vs2026
           built at    : $(Get-Date -Format o)
           cmake flags : -DGGML_VULKAN=ON -DGGML_NATIVE=OFF -DGGML_CPU_ALL_VARIANTS=ON -DGGML_BACKEND_DL=ON -DGGML_RPC=ON -DBUILD_SHARED_LIBS=ON -DLLAMA_CURL=OFF
           "@ | Out-File -FilePath "$stage\BUILD_INFO.txt" -Encoding utf8
