@@ -83,7 +83,7 @@ jobs:
           $vkLoader = "$env:VULKAN_SDK\Bin\vulkan-1.dll"
           if (Test-Path $vkLoader) { Copy-Item $vkLoader -Destination $stage -Force }
 
-          # Bundle OpenSSL DLLs so users don't need to install it separately
+          # Bundle OpenSSL DLLs
           $sslSearchPaths = @(
             "C:\Program Files\OpenSSL\bin",
             "C:\Program Files\OpenSSL-Win64\bin",
@@ -103,18 +103,43 @@ jobs:
               break
             }
           }
-          # Fallback: search runner system for the DLLs
+          # Fallback: search common runner locations only
           foreach ($dll in $sslDlls) {
             if (-not (Test-Path (Join-Path $stage $dll))) {
-              $found = Get-ChildItem -Path C:\ -Filter $dll -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-              if ($found) {
-                Write-Host "Found $dll via search at $($found.FullName)"
-                Copy-Item $found.FullName -Destination $stage -Force
-              } else {
+              $fallbackPaths = @(
+                "C:\Windows\System32",
+                "C:\hostedtoolcache",
+                "C:\tools",
+                "C:\Strawberry\c\bin"
+              )
+              foreach ($fp in $fallbackPaths) {
+                if (-not (Test-Path $fp)) { continue }
+                $found = Get-ChildItem -Path $fp -Filter $dll -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($found) {
+                  Write-Host "Found $dll via fallback at $($found.FullName)"
+                  Copy-Item $found.FullName -Destination $stage -Force
+                  break
+                }
+              }
+              if (-not (Test-Path (Join-Path $stage $dll))) {
                 Write-Host "WARNING: $dll not found on runner"
               }
             }
           }
+
+          # Build info
+          @"
+          source repo : am17an/llama.cpp
+          source ref  : ${{ github.event.inputs.ref || 'mtp-clean' }}
+          source sha  : $env:SOURCE_SHA
+          backend     : Vulkan $env:VULKAN_VERSION
+          runner      : windows-2025
+          built at    : $(Get-Date -Format o)
+          cmake flags : -DGGML_VULKAN=ON -DGGML_NATIVE=OFF -DGGML_CPU_ALL_VARIANTS=ON -DGGML_BACKEND_DL=ON -DGGML_RPC=ON -DBUILD_SHARED_LIBS=ON -DLLAMA_CURL=OFF
+          "@ | Out-File -FilePath "$stage\BUILD_INFO.txt" -Encoding utf8
+
+          Write-Host "=== Staged files ==="
+          Get-ChildItem $stage | Format-Table Name,Length
 
       - name: Upload artifact
         uses: actions/upload-artifact@v5
