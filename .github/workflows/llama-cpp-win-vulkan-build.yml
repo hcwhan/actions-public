@@ -16,7 +16,7 @@ jobs:
     runs-on: windows-2025-vs2026
     steps:
       - name: Checkout am17an/llama.cpp
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: am17an/llama.cpp
           ref: ${{ github.event.inputs.ref || 'mtp-clean' }}
@@ -24,7 +24,7 @@ jobs:
           fetch-depth: 1
 
       - name: Setup Node.js for WebUI build
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
 
