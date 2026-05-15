@@ -31,14 +31,17 @@ jobs:
       # Predigest WebUI assets so CMake takes the "local" priority branch and never
       # touches npm (CMake's execute_process can't find npm.cmd on Windows).
       # We invoke vite directly to bypass `npm run build`, which calls a bash post-build.sh.
+      # NOTE: In cmd batch scripts, invoking another .cmd file without `call` ends the
+      # current script immediately, so npm/npx (which are .cmd shims) MUST be prefixed
+      # with `call`, otherwise only the first npm line runs and the step exits silently.
       - name: Build WebUI assets
         shell: cmd
         working-directory: llama.cpp/tools/server/webui
         run: |
-          node --version
-          npm --version
-          npm ci
-          npx vite build
+          node --version || exit /b 1
+          call npm --version || exit /b 1
+          call npm ci || exit /b 1
+          call npx vite build || exit /b 1
 
       - name: Verify WebUI assets exist
         shell: pwsh
