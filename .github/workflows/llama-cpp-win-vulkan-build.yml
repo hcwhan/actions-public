@@ -28,11 +28,29 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Verify npm availability
-        shell: pwsh
+      # Predigest WebUI assets so CMake takes the "local" priority branch and never
+      # touches npm (CMake's execute_process can't find npm.cmd on Windows).
+      # We invoke vite directly to bypass `npm run build`, which calls a bash post-build.sh.
+      - name: Build WebUI assets
+        shell: cmd
+        working-directory: llama.cpp/tools/server/webui
         run: |
           node --version
           npm --version
+          npm ci
+          npx vite build
+
+      - name: Verify WebUI assets exist
+        shell: pwsh
+        working-directory: llama.cpp/tools/server/public
+        run: |
+          $required = @('index.html','bundle.js','bundle.css','loading.html')
+          foreach ($f in $required) {
+            if (-not (Test-Path $f)) {
+              throw "WebUI asset missing: $f"
+            }
+            Write-Host "OK: $f"
+          }
 
       - name: Record source commit
         shell: pwsh
