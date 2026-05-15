@@ -23,6 +23,17 @@ jobs:
           path: llama.cpp
           fetch-depth: 1
 
+      - name: Setup Node.js for WebUI build
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify npm availability
+        shell: pwsh
+        run: |
+          node --version
+          npm --version
+
       - name: Record source commit
         shell: pwsh
         working-directory: llama.cpp
